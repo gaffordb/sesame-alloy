@@ -47,7 +47,7 @@ sig Message {
 }
 
 sig Mailbox {
-	message : Message
+	messages : Message
 }
 
 sig Session {
@@ -116,19 +116,88 @@ pred delete_device_record[d, d': Device, dr: Device_Record] {
 
 // TODO: understand the code
 pred delete_session[d, d': Device, s: Session] {
+	let ss = d.user_records.device_records.active_session + d.user_records.device_records.inactive_sessions | {
+
+	// precond: s is some session in d
+	s in ss
+
+	// postcond: 
+	// the Session is removed. if it is the last Session for a given DeviceRecord, remove that DeviceRecord as well
+	d'.user_records.device_records.active_session = (d.user_records.device_records.active_session - s) or 
+	d'.user_records.device_records.inactive_sessions = (d.user_records.device_records.inactive_sessions - s) or
+		some dr : Device_Record | delete_device_record[d,d',dr] and ss = {s}
 	
+	// frame conditions
+	d'.current_user_record = d.current_user_record
+	d'.id = d.id
+	d'.keys = d.keys
+	d'.elapsed_time = d.elapsed_time + 1 // Should we update time??
+	}
 }
 
-// TODO: use promotion instead
-pred insert_session[d, d': Device, dr, dr': Device_Record, s: Session] {
+
+// insert_session operation (promotion pattern)
+pred insert_session_global[d, d': Device, s: Session] {
+	some dr, dr': Device_Record |
+		insert_session_promote[d, d', dr, dr', s] and
+		insert_session_local[dr, dr', s]
+
+	// frame condition for global state Device
+	d'.current_user_record = d.current_user_record
+	d'.id = d.id
+	d'.keys = d.keys
+	d'.elapsed_time = d.elapsed_time + 1
+}
+
+pred insert_session_local[dr, dr': Device_Record, s: Session] {
+	// describe changes to local state Device_Record
+	dr'.active_session = s
+	dr'.inactive_sessions = dr.active_session + dr.inactive_sessions
+	dr'.stale = dr.stale
+}
+
+pred insert_session_promote[d, d': Device, dr, dr': Device_Record, s: Session] {
+	// describe how global state Device and local state Device_Record relate to each other in the insert_session operation
+	dr' in d'.user_records.device_records
+	dr in d.user_records.device_records
+	d'.user_records.device_records = d.user_records.device_records - dr + dr'
+}
+
+
+// activate_session operation (promotion pattern)
+pred activate_session_global[d, d': Device, s: Session] {
+	some dr, dr': Device_Record |
+		activate_session_promote[d, d', dr, dr', s] and
+		activate_session_local[dr, dr', s]
+
+	// frame condition
+	d'.current_user_record = d.current_user_record
+	d'.id = d.id
+	d'.keys = d.keys
+	d'.elapsed_time = d.elapsed_time
+}
+
+pred activate_session_local[dr, dr': Device_Record, s: Session] {
+	// pre-condition
+	s in dr.inactive_sessions
+
+	// post-condition
+	dr'.active_session = s
+	dr'.inactive_sessions = dr.inactive_sessions - s + dr.active_session
+
+	// frame condition
+	dr'.stale = dr.stale
 
 }
 
-// TODO: use promotion instead
-pred activate_session[d, d': Device, dr, dr': Device_Record, s: Session] {
-
+pred activate_session_promote[d, d': Device, dr, dr': Device_Record, s: Session] {
+	dr in d.user_records.device_records
+	dr' in d'.user_records.device_records
+	d'.user_records.device_records = d.user_records.device_records - dr + dr'
 }
 
+
+// TODO: convert to promotion pattern
 pred mark_user_record_stale[d, d': Device, ur, ur': User_Record] {
 	// pre-condition:
 	// User_Record "ur" and "ur'" exists in the old and new Device state "d" and "d'"
@@ -152,6 +221,7 @@ pred mark_user_record_stale[d, d': Device, ur, ur': User_Record] {
 	d'.elapsed_time = d.elapsed_time	
 }
 
+// TODO: convert to promotion pattern
 pred mark_device_record_stale[d, d': Device, dr, dr': Device_Record] {
 	// pre-condition:
 	// Device_Records "dr" and "dr'" exists in the old and new Device state "d" and "d'"
@@ -179,26 +249,37 @@ pred mark_device_record_stale[d, d': Device, dr, dr': Device_Record] {
 // receipient must include device's own user ID
 // TODO: set of receipients instead of only one
 // TODO: send_message_to_server, fetch_message_from_server, receive_message
-pred send_message[s, s': Server, m: Message, recipient_user_id: User_ID] {
+
+// @uid: the User_ID of the recipient of the message
+// send the message to the Server
+pred send_message[s, s': Server, m: Message, uid: User_ID] {
 	// TODO: User_Record must be non-stale
 
 	// pre-condition:
 	// User_Record exists for the recipient User_ID (User -> Device -> User_Record)
 	some u: User, ur: User_Record {
-		u.id = recipient_user_id // same user id
-		ur in u.devices.user_records // exists user_records
-
+		u.id = uid					// same user id
+		ur in u.devices.user_records	// exists user_records
+	
 		// post-condition (add new device_mail mappings to the existing mappings in the device)
-		s'.device_mail = s.device_mail // wrong
-		all d: u.devices | s'.device_mail = s'.device_mail + (d -> m) // don't know how to express.. add all to one mapping u.devices -> m to s'.device_mail mapping
+		some dm: Device -> Mailbox {
+			// get all Device -> Mailbox mappings for the user
+			all d: u.devices {
+				some mb: Mailbox {
+					m in mb.messages 	// sender message must contain in the mailbox
+					(d -> mb) in dm	// mapping must exist in the device_mail
+				}
+			}
+			s'.device_mail = s.device_mail + dm		
+		//all d: u.devices | s'.device_mail = s'.device_mail + (d -> m) // don't know how to express.. add all to one mapping u.devices -> m to s'.device_mail mapping
+		}
 	}
-
 	// post-condition:
 	// get all devices of the message receipient
 	// update the server.device_mail
 }
 
-pred receive_message[] {
+pred receive_message[s, s': Server] {
 }
 
 //-----------------------
@@ -227,4 +308,9 @@ run delete_user_record {
 run delete_device_record {
 	invariant
 	some d, d': Device, dr: Device_Record | delete_device_record[d, d', dr]
+}
+
+run send_message {
+	invariant
+	some s, s': Server, m: Message, uid: User_ID | send_message[s, s', m, uid]
 }

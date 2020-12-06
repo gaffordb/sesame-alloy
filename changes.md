@@ -29,3 +29,11 @@ Don't Know
 - how to pass in a list of recipients
 - line 75 - not understanding the "or" statement (deleting the user-record)
 should that be changed to and instead
+- How to properly update the elapsed time
+- How to link Sessoin with the messages
+
+Limitation of Alloy
+- imperative mentality, using declarative statement
+
+suggestions:
+- abstract away unnecessary details (stale/elapsed_time)
