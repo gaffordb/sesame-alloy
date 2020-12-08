@@ -8,7 +8,7 @@ sig Server {
 sig User_Record {
 	device_records: set Device_Record, // (0 or more) records all devices that user owns
     id: one User_ID,
-    known_devices: set Public_Key // set of public_keys for known devices (from other users) for message decryption purposes
+    known_devices_keys: set Public_Key // set of public_keys for known devices (from other users) for message decryption purposes
 }
 
 sig Device_Record {
@@ -77,6 +77,8 @@ sig Session_ID {}
 //------------------
 // System Operations
 //------------------
+
+// Primitive Operations: Add and Delete User and Device Records
 pred add_user_record[s, s': Server, ur: User_Record] {
     // add User_Record to the Server
 
@@ -114,7 +116,7 @@ pred add_device_record[ur, ur': User_Record, dr: Device_Record] {
 
     // frame condition
     ur'.id = ur.id
-    ur'.known_devices = ur.known_devices
+    ur'.known_devices_keys = ur.known_devices_keys
 }
 
 pred delete_device_record[ur, ur': User_Record, dr: Device_Record] {
@@ -128,57 +130,117 @@ pred delete_device_record[ur, ur': User_Record, dr: Device_Record] {
 
     // frame condition
     ur'.id = ur.id
-    ur'.known_devices = ur.known_devices
+    ur'.known_devices_keys = ur.known_devices_keys
 }
 
 // fun create_message_from_text[pt: Plain_Text]{
 // 
 // }
 
-// helper functions
-fun create_matching_intiaiting_session[s: Initiating_Session]: Initiating_Session {
-    // create a matching session for the initiating session
-    { s': Initiating_Session {
-            s'.id = s.id
-            s'.from = s.to // flip the from and to field for the matching session
-            s'.to = s.from
-            s'.public_key = s.public_key
-        }
-    }
+
+// helper function for create_initiating_session
+// function to create a initiating session with a distinct Session_ID
+fun create_initiating_session[dr_from, dr_to: Device_Record]: Initiating_Session {
+    { s: Initiating_Session {
+        s.from = dr_from
+        s.to = dr_to
+        s.public_key = dr_to.keys.public_key // public key from the device (to send to) for message encryption
+        s.id not in dr_from.sessions.id // ensure the session ID is distinct in the sender device
+        s.id not in dr_to.sessions.id // ensure the session ID is distinct in the receipient device
+    }  }
 }
 
-fun create_matching_regular_session[s: Regular_Session]: Regular_Session {
-    // create a matching sessino for the regular session
+// Create the initiating session to exchange the public key between the sender device and receipient device
+// the session created in the device_record contains the public key for the opposite device for encryption purposes
+pred create_initiating_session_for_device_record[dr_from, dr_from', dr_to, dr_to': Device_Record] {
+    // exchange public key via the matching session
+    
+    // pre-condition:
+    // make sure devices are distinct (from and to device are different)
+    not dr_from = dr_to
+
+    // post-condition
+    dr_from'.sessions = dr_from.sessions + create_initiating_session[dr_from, dr_to]
+    dr_to'.sessions = dr_to.sessions + create_initiating_session[dr_to, dr_from]
+
+    // frame condition
+    dr_from'.keys = dr_from.keys
+    dr_from'.id = dr_from.id
+    dr_to'.keys = dr_to.keys
+    dr_to'.id = dr_to.id
+}
+
+// given the device record and the initiating session from the device, extract the public key from the initiating
+pred fetch_public_key_from_initiating_session[ur, ur': User_Record, s: Initiating_Session] {
+    // pre-condition
+    // ensure that the Initiating_Session s belongs to the Device_Record that belongs to the User_Record
+    s in ur.device_records.sessions
+
+    // post-condition: add the public_key from the session to the user_record for decryption
+    ur'.known_devices_keys = ur.known_devices_keys + s.public_key
+    
+    // frame condition
+    ur'.device_records = ur.device_records
+    ur'.id = ur.id
+}
+
+// given the initiaiting session, convert to regular session with empty set of messages
+fun create_regular_session_from_initiating_session[s: Initiating_Session]: Regular_Session {
     { s': Regular_Session {
+            s'.from = s.from
+            s'.to = s.to
             s'.id = s.id
-            s'.from = s.to // flip the from and to field for the matching session
-            s'.to = s.from
-            s'.messages = s.messages
+            #s'.messages = 0 // create an empty set of messages
+            // s'.messages = {}
         }
     }
+    // delete the initiating_session first before creating regular session
+
 }
+
+// // create the regular session from the initiating session
+// fun create_matching_regular_session[s: Regular_Session]: Regular_Session {
+//     // create a matching sessino for the regular session
+//     { s': Regular_Session {
+//             s'.id = s.id
+//             s'.from = s.to // flip the from and to field for the matching session
+//             s'.to = s.from
+//             s'.messages = s.messages
+//         }
+//     }
+// }
+
+pred create_regular_session_for_device_record[dr_from, dr_from', dr_to, dr_to': Device_Record] {
+    // precondition, both devices have initiation sessions to each other
+    // some s_from, s_to: Initiating_Session {
+        // delete those sessions
+        // convert to the regular sessions and add them to the device_records
+    //}
+}
+
                                   // sender/destination      // sending device
-pred send_message[pt: Plain_Text, u_from, u_to, u_to': User_Record, dr_from, dr_from': Device_Record] {
+                                  // via the regular channel
+pred send_message_to_server[pt: Plain_Text, u_from, u_to, u_to': User_Record, dr_from, dr_from': Device_Record] {
 
     // encapsulate the message first
 
     // if no session exists, create_initiating_session
     // if session exists, send
+    
+    // pre-condition
+    // check if regular session exists 
+    // send message to the server first, in "receive_message" fetch the encrypted message from the server
 
 }
+
+// pred fetch_from_server
+// decrypt the messages
+// add them to the corresponding session in the session in the receipient (Via Session_ID)
+// property check: everytime after the fetch from server, the messages fetched (in the receipient session) will be consistent between the sender and receipient (nothing being altered)
 
 // given the device records for the sender and the receiver, create initiating sessions
 
-pred create_initiating_session[dr_from, dr_from', dr_to, dr_to': Device_Record] {
-    // dr_from.sessions
-    // intiating session will turn to regular session at the end
 
-    // intiating session created will exchanges public keys of the devices
-}
-
-pred fetch_public_key_from_initiating_session[] {
-
-}
 
 pred delete_session[] {
 
@@ -217,9 +279,9 @@ pred invariants {
 
 
 
-//----------
-// Functions
-//----------
+//-----------------------------
+// Functions for Visualizations
+//-----------------------------
 
 // decrypt the Cipher_Text
 // Cipher_Text -> decrypt_text -> Plain_Text$(id=0)
@@ -291,26 +353,27 @@ assert Always_Decrypt {
 
 check Always_Decrypt for 3
 
-assert Matching_Session_Property {
-    // all s, s': Initiating_Session | s' = create_matching_initiating_session[s'] 
-    all s, s': Initiating_Session {
-        s' = create_matching_intiaiting_session[s] => {
-            s.from = s'.to
-            s.to = s'.from
-            s.public_key = s.public_key
-        } 
-    }
+// assert Matching_Session_Property {
+//     // all s, s': Initiating_Session | s' = create_matching_initiating_session[s'] 
+//     // all s, s': Initiating_Session {
+//     //     s' = create_matching_intiaiting_session[s] => {
+//     //         s.from = s'.to
+//     //         s.to = s'.from
+//     //         s.public_key = s.public_key
+//     //     } 
+//     // }
 
-    all s, s': Regular_Session {
-        s' = create_matching_regular_session[s] => {
-            s.from = s'.to
-            s.to = s'.from
-            s.messages = s'.messages
-        }
-    }
-}
+//     all s, s': Regular_Session {
+//         s' = create_matching_regular_session[s] => {
+//             s.from = s'.to
+//             s.to = s'.from
+//             s.messages = s'.messages
+//         }
+//     }
+// }
 
-check Matching_Session_Property for 3
+// check Matching_Session_Property for 3
+
 //-------------------
 // Run/Test Instances
 //-------------------
@@ -400,23 +463,23 @@ but 2 Private_Key,
     0 Cipher_Text,
     0 Mailbox
 
-// demonstrate the create_matching_session function
-run create_matching_initiating_session_run {
-    some s, s': Initiating_Session | s' = create_matching_intiaiting_session[s]
-} for 5 
-but 2 Private_Key,
-    2 Public_Key,
-    0 Server,
-    0 User_Record,
-    4 Device_Record,
-    2 Initiating_Session,
-    0 Regular_Session,
-    0 Message,
-    2 Session_ID,
-    2 Device_ID,
-    2 User_ID,
-    // 1 Init_Sever_State,
-    0 Text,
-    0 Plain_Text,
-    0 Cipher_Text,
-    0 Mailbox
+// // demonstrate the create_matching_session function
+// run create_matching_initiating_session_run {
+//     some s, s': Initiating_Session | s' = create_matching_intiaiting_session[s]
+// } for 5 
+// but 2 Private_Key,
+//     2 Public_Key,
+//     0 Server,
+//     0 User_Record,
+//     4 Device_Record,
+//     2 Initiating_Session,
+//     0 Regular_Session,
+//     0 Message,
+//     2 Session_ID,
+//     2 Device_ID,
+//     2 User_ID,
+//     // 1 Init_Sever_State,
+//     0 Text,
+//     0 Plain_Text,
+//     0 Cipher_Text,
+//     0 Mailbox
