@@ -37,3 +37,23 @@ Limitation of Alloy
 
 suggestions:
 - abstract away unnecessary details (stale/elapsed_time)
+
+
+
+Presentation
+- specs is insufficient in modeling stuff..We have to add stuff in (invariants)
+
+
+refactored-12_7.als changes from refactored.als
+- line 126: commented "or"
+- line 291: commented: invariant
+- TODO: mark_user_record_stale/mark_device_record_stale: convert to promotion pattern
+- change on send_message
+
+
+alloy shortcoming
+- not modular (hard for collaboartion) 
+- overhead of understanding the code before contributing
+
+challenging on the project:
+- take the specs literally. Specs is writting in an object-oriented/imperative way (initiation of processes with parameter)
