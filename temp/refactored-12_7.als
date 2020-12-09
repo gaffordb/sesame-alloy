@@ -26,7 +26,7 @@ sig Server {
 sig User_Record {
 	device_records : Device_Record, 
 	stale : Int, // mark the time the user record has been in the stale state, -1 for active
-	known_devices_keys : Public_Key // user identity keys
+	known_devices_keys : Public_Key, // user identity keys
 	id: one User_ID
 }
 

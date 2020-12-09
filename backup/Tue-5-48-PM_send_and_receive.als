@@ -228,97 +228,40 @@ pred create_regular_session_for_device_record_from_initiating_session[dr_from, d
         // then delete the initiating session
         dr_from'.sessions = dr_from.sessions - s + create_regular_session_from_initiating_session[s]
         dr_to'.sessions = dr_to.sessions - s' + create_regular_session_from_initiating_session[s']
-
-        // frame condition
-        dr_from'.keys = dr_from.keys
-        dr_from'.id = dr_from.id
-
-        dr_to'.keys = dr_to.keys
-        dr_to'.id = dr_to.id
     }
 }
 
-// create/encapsulate a message based on sender device ID (sdid) and sender user ID (suid)
-fun create_message_from_text[pt: Plain_Text, sdid: Device_ID, suid: User_ID]: Message {
-    { m: Message {
-            m.sender_device_ID = sdid
-            m.sender_user_ID = suid
-            m.content = pt
-        }
-    }
-}
 
                                   // sender/destination      // sending device
                                   // via the regular channel
+pred send_message_to_server[s, s': Server, pt: Plain_Text, u_from, u_to, u_to': User_Record, dr_from, dr_from': Device_Record] {
 
-// append the message (decrypted) in the session (sender device for sending)
-// encrypt the message, append it to Server.device_mail Mailbox
-// alter the server state
-// alter the user_record state -> in particular device state -> append messages to the session established (from the sender to the recipient)
-pred send_message_to_server[s, s': Server, pt: Plain_Text, ur_from, ur_from', ur_to: User_Record, dr_from, dr_from': Device_Record] {
+    // encapsulate the message first
 
-    
     // if no session exists, create_initiating_session
     // if session exists, send
     
     // pre-condition
-    // dr_from must be in ur_from
-    dr_from in ur_from.device_records
-
-    // plain_text can be encrypted to an arbitrary Cipher_Text using the public key of the current device, 
-    one ct: Cipher_Text | dr_from.keys.public_key -> ct in pt.encryption
-
-    // there exists *active* regular sessions to establish the communication
-
-    // TODO: given sender_user_record (ur_from), sender device (dr_from), receipient user_record (ur_to),
-    // create initiating_session/convert_to_regular_session from sending_device (dr_from) to all sender's other devices
-    // and all devicess for the recipient (ur_to.device_records)
-
-    all dr: ur_from.device_records - dr_from, dr': ur_to.device_records | some s: Regular_Session {
-        // make sure there are established sessions first
-        // all devices but the device that the message is sent from, must establish session connection 
-        // all devices of the receipts must establish regular session connection with the sender
-        s in dr.sessions // s in all other devices of sender
-        s in dr'.sessions // s in all recipient devices
-        s.id in dr_from.sessions.id // matches the session in the sending device
-
-        // post-condition
-        // send message to the server first, in "receive_message" fetch the encrypted message from the server
-        // append the message to the session in the sender (porting to self and other devices)
-        one m: Message {
-            m = create_message_from_text[pt, dr_from.id, ur_from.id]
-            // append dr -> Mailbox(m), dr' -> Mailbox(m)
-            all sender_session: Session {
-                sender_session.id = s.id
-                one sender_session': Session {
-
-                    sender_session'.messages = sender_session.messages + m // append the message to the sender sessions
-                    sender_session'.id = sender_session.id
-                    sender_session'.from = sender_session.from
-                    sender_session'.to = sender_session.to
-
-                    // post-condition
-                    sender_session' in dr_from'.sessions
-                }
-            }
-        }
-    }
-
-    dr_from' in ur_from'.device_records
-
-
-
-    // encapsulate the message first
+    // check if regular session exists 
+    // send message to the server first, in "receive_message" fetch the encrypted message from the server
 
 }
 
-pred receive_from_server {
-
-}
-
+// pred fetch_from_server
 // decrypt the messages
 // add them to the corresponding session in the session in the receipient (Via Session_ID)
 // property check: everytime after the fetch from server, the messages fetched (in the receipient session) will be consistent between the sender and receipient (nothing being altered)
+
+// given the device records for the sender and the receiver, create initiating sessions
+
+// send message combines all operation, stream line operations
+// easier for checking message
+// check the message sent from User_1 to User_2 will be delivered to all User_1's other devices and User_1's all devices 
+
+
+pred delete_session[] {
+
+}
 
 pred encrypt_message[] {
 
@@ -336,17 +279,6 @@ pred decrypt_message[m, m': Message, dr: Device_Record] {
 pred receive_message_from_server {
 
 }
-
-// MAYBE: send message combines all operation, stream line operations
-// easier for checking message
-// check the message sent from User_1 to User_2 will be delivered to all User_1's other devices and User_1's all devices 
-
-
-// pred delete_session[] {
-
-// }
-
-
 
 // system invariants that should be preserved by each operation
 pred invariants {
