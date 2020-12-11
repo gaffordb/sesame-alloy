@@ -1,71 +1,62 @@
-// Created on Mon 2020-12-07 17:01:52 EST
-// Ben Gafford and Simon Chu
-// 17724 - Advanced Formal Method
-// Final Project
+// Mon 2020-12-07 17:01:52 EST
 
 sig Server {
-    // all users that are registered on the server
-    user_records: set User_Record,
-
-    // store unfetched Messages for each Device_Record in the Mailbox
-    device_mail: Device_Record -> one Mailbox
+    user_records: set User_Record, // (0 or more) record of all users registered in the server
+    device_mail: Device_Record -> one Mailbox // store unfetched messages for each device in the Mailbox
 }
 
 sig User_Record {
-    // Device_Records owned by the User_Record
-    device_records: set Device_Record,
-
-    // Public_Keys for the known devices for Message decryption purposes
-    known_devices_keys: set Public_Key,
-    
-    id: one User_ID
+	device_records: set Device_Record, // (0 or more) records all devices that user owns
+    id: one User_ID,
+    known_devices_keys: set Public_Key // set of public_keys for known devices (from other users) for message decryption purposes
 }
 
 sig Device_Record {
-    // open sessions to communicate between the device and other devices
-    sessions: set Session,
-
-    // contains Public/Private Key_Pair for device to encrypt/decrypt messages
-    keys: one Key_Pair,
-
+    sessions: set Session, // (0 or more) open sessions to communicate between the device and other devices
+    keys: one Key_Pair, // contains public/private key pair for device to encrypt/decrypt messages
     id: one Device_ID
 }
 
 sig Session {
-    from: one Device_Record, // the Device_Record that the Message is sent from
-    to: one Device_Record,   // the Device_Record that the Message is sent to
+    from: one Device_Record, // the device the message is sent from
+    to: one Device_Record, // the device message is sent to
     id: one Session_ID
+    // have field stores matching session
 }
 
+// Initiating_Session is Regular_Session with the public_key
 sig Initiating_Session extends Session {
-    public_key: one Public_Key // the Public_Key needed to encrypt Messages
+    // messages: set Message, // message sent via the session
+    public_key: one Public_Key // the public key needed to encrypt messages
 }
 
 sig Regular_Session extends Session {
-    messages: set Message // Messages sent via the Regular_Session
+    messages: set Message // message sent via the session
 }
 
 sig Message {
-    sender_device_ID : one Device_ID, // Device_ID for the sender
-    sender_user_ID : one User_ID,	  // User_ID for the sender
-    content: one Text                 // Text content for the message
+	sender_device_ID : one Device_ID,	// Device_ID for the sender
+	sender_user_ID : one User_ID,		// User_ID for the sender
+	content: one Text              // Text content for the message
 }
 
 sig Mailbox {
-    messages : set Message
+	messages : set Message
 }
 
-// Text is the super type for Cipher_Text and Plain_Text
+// super type for Cipher_Text and Plain_Text
 sig Text {}
 
 sig Cipher_Text extends Text {
-    private_key: one Private_Key, // Private_Key needed to decrypt the Ciphered Text
-    plain_text: one Plain_Text    // Plain_Text that the Cipher_Text can be decrypted to
+    private_key: one Private_Key, // private key needed to decrypt the ciphered message
+    plain_text: one Plain_Text        // plain text that it can be decrypted to
 }
 
 sig Plain_Text extends Text {
-    // Cipher_Text that the Plain_Text can be encrypted to using Public_Keys
-    encryption: set Public_Key -> Cipher_Text
+    // note that Plain_Text doesn't have a public_key associated with it
+    // because any arbitrary public_key can encrypt a Plain_Text
+    // ensure that each Public Key can only encrypt to one Cipher_Text
+    encryption: set Public_Key -> Cipher_Text // cipher text that the plain text can be encrypted to
 }
 
 sig Key_Pair {
@@ -88,9 +79,9 @@ sig Session_ID {}
 // System Operations
 //------------------
 
-// add User_Record to the Server
+// Primitive Operations: Add and Delete User and Device Records
 pred add_user_record[s, s': Server, ur: User_Record] {
-    
+    // add User_Record to the Server
 
     // pre-condition: User_Record ur is not in the Server
     ur not in s.user_records
@@ -102,8 +93,8 @@ pred add_user_record[s, s': Server, ur: User_Record] {
     s'.device_mail = s.device_mail
 }
 
-// delete User_Record from the Server
 pred delete_user_record[s, s': Server, ur: User_Record] {
+    // delete User_Record from the Server
 
     // pre-condition: User_Record ur is in the Server
     ur in s.user_records
@@ -115,8 +106,8 @@ pred delete_user_record[s, s': Server, ur: User_Record] {
     s'.device_mail = s.device_mail
 }
 
-// add Device_Record to the User_Record
 pred add_device_record[ur, ur': User_Record, dr: Device_Record] {
+    // add Device_Record to the User_Record
 
     // pre-condition: Device_Record does not exists in the User_Record
     dr not in ur.device_records
@@ -129,8 +120,8 @@ pred add_device_record[ur, ur': User_Record, dr: Device_Record] {
     ur'.known_devices_keys = ur.known_devices_keys
 }
 
-// add Device_Record to the User_Record
 pred delete_device_record[ur, ur': User_Record, dr: Device_Record] {
+    // add Device_Record to the User_Record
 
     // pre-condition: Device_Record exists in the User_Record
     dr in ur.device_records
@@ -143,7 +134,7 @@ pred delete_device_record[ur, ur': User_Record, dr: Device_Record] {
     ur'.known_devices_keys = ur.known_devices_keys
 }
 
-// add the Session to Device_Record
+// add the session to device record
 pred add_session[dr, dr': Device_Record, s: Session] {
     // pre-condition: session does not exist in the device
     s not in dr.sessions
@@ -156,7 +147,6 @@ pred add_session[dr, dr': Device_Record, s: Session] {
     dr.id = dr.id
 }
 
-// delete the Session from the Device_Record
 pred delete_session[dr, dr': Device_Record, s: Session] {
     // pre-condition: session exists in the device
     s in dr.sessions
@@ -169,13 +159,16 @@ pred delete_session[dr, dr': Device_Record, s: Session] {
     dr.id = dr.id
 }
 
-// create a initiating session with a distinct Session_ID
+
+
+// helper function for create_initiating_session
+// function to create a initiating session with a distinct Session_ID
 fun create_initiating_session[dr_from, dr_to: Device_Record, sid: Session_ID]: Initiating_Session {
     { s: Initiating_Session {
         s.from = dr_from
         s.to = dr_to
         s.public_key = dr_to.keys.public_key // public key from the device (to send to) for message encryption
-        s.id = sid // specify unique session ID via the parameter passed
+        s.id = sid // specify unique session ID through the parameter passed
     }  }
 }
 
@@ -200,10 +193,13 @@ pred create_initiating_session_for_device_record[dr_from, dr_from', dr_to, dr_to
         // add the created initiating_session to the sender and recipient device_records
         some sf: create_initiating_session[dr_from, dr_to, sid] |
             dr_from'.sessions = dr_from.sessions + sf
+        // dr_from'.sessions = dr_from.sessions + create_initiating_session[dr_from, dr_to, sid]
 
         // create the matching initiating session
         some st: create_initiating_session[dr_to, dr_from, sid] |
             dr_to'.sessions = dr_to.sessions + st
+        
+        // dr_to'.sessions = dr_to.sessions + create_initiating_session[dr_to, dr_from, sid]
     }
   
     // post-condition
@@ -224,7 +220,6 @@ pred create_initiating_session_for_device_record[dr_from, dr_from', dr_to, dr_to
 
 // create initiating session from the user that the message is sent from to all other devices of the user and all recipient devices
 pred create_initiating_session_for_sending[ur_from, ur_from', ur_to, ur_to': User_Record, dr_from, dr_from': Device_Record] {
-
     // pre-condition
     dr_from in ur_from.device_records
 
@@ -269,12 +264,14 @@ fun create_regular_session_from_initiating_session[s: Initiating_Session]: Regul
             #s'.messages = 0 // create an empty set of messages
         }
     }
+    // delete the initiating_session first before creating regular session
+
 }
 
 // given the device the message is sending from
 // create the the regular session for the device based on the initiating session
-// then delete the initiating session after
-// converting the initiating session to the regular session
+// then delete the 
+// convert the initiating session to the regular session
 pred create_regular_session_for_device_record_from_initiating_session[dr_from, dr_from', dr_to, dr_to': Device_Record] {
     
     // pre-condition: make sure devices are distinct (from and to device are different)
@@ -344,6 +341,7 @@ pred create_regular_session_from_initiating_session_for_sending[ur_from, ur_from
     dr_from'.id = dr_from.id
 }
 
+// helper function
 // create/encapsulate a message based on sender device ID (sdid) and sender user ID (suid)
 fun create_message_from_text[pt: Plain_Text, sdid: Device_ID, suid: User_ID]: Message {
     { m: Message {
@@ -354,6 +352,7 @@ fun create_message_from_text[pt: Plain_Text, sdid: Device_ID, suid: User_ID]: Me
     }
 }
 
+// helper function
 // given the sender device record and user record, create the message
 fun create_message_from_text_sender_user[pt: Plain_Text, sd: Device_Record, su: User_Record]: Message {
     {  m: Message {
@@ -362,9 +361,9 @@ fun create_message_from_text_sender_user[pt: Plain_Text, sd: Device_Record, su: 
     }
 }
 
+// helper function
 // encrypt message for a specific Device_Record to receive it
 pred encrypt_message[m, m': Message, dr: Device_Record, ur: User_Record] {
-
     // pre-condition: User Record must have the public_key for encrypting for the Device_Record
     dr.keys.public_key in ur.known_devices_keys
 
@@ -376,11 +375,11 @@ pred encrypt_message[m, m': Message, dr: Device_Record, ur: User_Record] {
     m'.sender_user_ID = m.sender_user_ID
 }
 
+// helper function
 // decrypt the ciphered text on device
 pred decrypt_message[m, m': Message, dr: Device_Record] {
-
     // pre-condition:
-    // user must has the public key needed to decrypt the ciphered text in the message
+    // usr must has the public key needed to decrypt the ciphered text in the message
     m.content.private_key = dr.keys.private_key
 
     // post condition: text is decrypted and stored in the message
@@ -392,10 +391,21 @@ pred decrypt_message[m, m': Message, dr: Device_Record] {
 }
 
 
+// sender/destination      // sending device
+// via the regular channel
+
 // append the message (decrypted) in the session (sender device for sending)
 // encrypt the message, append it to Server.device_mail Mailbox
+// alter the server state
+// alter the user_record state -> in particular device state -> append messages to the session established (from the sender to the recipient)
 pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur_to: User_Record, dr_from, dr_from': Device_Record] {
 
+    // if server has corresponding mailbox for the device, append
+    // if not, add the mailbox for the device, and append the relation
+
+    // if no session exists, create_initiating_session
+    // if session exists, send
+    
     // pre-condition
     // dr_from must be in ur_from (sender Device_Record must belong to sender User_Record)
     dr_from in ur_from.device_records
@@ -405,15 +415,21 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
     // plain_text can be encrypted to an arbitrary Cipher_Text using the public key of the current device (that message is sent from)
     some ct: Cipher_Text | dr_from.keys.public_key -> ct in pt.encryption
 
+    // there exists *active* regular sessions to establish the communication
+
+    // TODO: given sender_user_record (ur_from), sender device (dr_from), receipient user_record (ur_to),
+    // create initiating_session/convert_to_regular_session from sending_device (dr_from) to all sender's other devices
+    // and all devicess for the recipient (ur_to.device_records)
+
+    // naming conflict s: Server, s: Session
     // send message from the dr_from to ur_from's all other devices and recipients' all devices
     all dr: ur_from.device_records - dr_from + ur_to.device_records |
-        some sid: Session_ID {
-
+        some sid: Session_ID {//some : Regular_Session {
             // make sure there are established sessions first / there are matching regular sessions
             // all devices but the device that the message is sent from, must establish session connection 
             // all devices of the receipts must establish regular session connection with the sender
-
             sid in dr.sessions.id // s in all other devices of sender and receipient device
+            // sid in dr'.sessions.id // s in all recipient devices
             sid in dr_from.sessions.id // matches the session in the sending device
 
             // post-condition
@@ -426,6 +442,9 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
                 // encrypt the message to cm (ciphered message)
                 encrypt_message[pm, cm, dr, ur_to]
 
+                // append dr -> Mailbox(m), dr' -> Mailbox(m)
+                // append message to the session of dr_from (dr_from'.sessions) and the server mailbox
+                
                 all sender_session: dr_from.sessions {
                     sender_session.id = sid
 
@@ -444,19 +463,25 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
             }
         }
 
+    // update the mailbox***
+
     // post condition, update User_Record and Server state
     ur_from'.device_records = ur_from.device_records - dr_from + dr_from'
-    s'.user_records = s.user_records - ur_from + ur_from'
+    s' = s.user_records - ur_from + ur_from'
+
+
+    // encapsulate the message first
+
 }
 
 pred receive_message_from_server[s, s': Server, dr_to, dr_to': Device_Record] {
-
+    // append the corresponding sessions
     // pre-condition:
     // the recipient Device_Records belongs to a registered User_Record in the Server
     dr_to in s.user_records.device_records
 
     // extract all messages that belongs to the Device_Record dr_to
-    all cm: dr_to.(s.device_mail).messages {
+    all cm: dr_to.(s.device_mail).messages { // all ciphered messages intended to be sent to dr_to
         some pm: Message {
             decrypt_message[cm, pm, dr_to]
 
@@ -492,13 +517,22 @@ pred receive_message_from_server[s, s': Server, dr_to, dr_to': Device_Record] {
     s'.user_records.device_records = s.user_records.device_records - dr_to + dr_to'
 }
 
+// add them to the corresponding session in the session in the receipient (Via Session_ID)
+// property check: everytime after the fetch from server, the messages fetched (in the receipient session) will be consistent between the sender and receipient (nothing being altered)
+
+
+
+// MAYBE: send message combines all operation, stream line operations
+// easier for checking message
+// check the message sent from User_1 to User_2 will be delivered to all User_1's other devices and User_1's all devices 
 
 //-----------------------------
 // Functions for Visualizations
 //-----------------------------
 
 // decrypt the Cipher_Text
-// for instance visualization purpose
+// Cipher_Text -> decrypt_text -> Plain_Text$(id=0)
+// for visualization purpose
 fun decrypt_text[ct: Cipher_Text]: one Plain_Text {
     // given a cipher_text
     // return the Plain_Text associated with the Cipher_Text
@@ -507,7 +541,8 @@ fun decrypt_text[ct: Cipher_Text]: one Plain_Text {
 
 
 // encrypt the Cipher_Text
-// for instance visualization purpose
+// Plain_Text -> encrypt_text -> Cipher_Text
+// for visualization purpose
 fun encrypt_text[pt: Plain_Text, pk: Public_Key]: one Cipher_Text {
     // given a plain_text
     // return the Cipher_Text encrypted from Plain_Text using Public_Key
@@ -518,17 +553,15 @@ fun encrypt_text[pt: Plain_Text, pk: Public_Key]: one Cipher_Text {
 //-------------
 // Global Facts
 //-------------
-
-// User cannot open a Session from and to the current Device_Record simultanously
 fact session_fact {
     all s: Session | not s.from = s.to
 }
 
 fact encryption_fact {
-// Cipher_Text and Plain_Text must be of a symmetric relationship
+    // cipher_text and plain_text must be of symmetric relationship
+    // meaning that if Cipher_Text$0.plain_text = Plain_Text$0;
+    // then Plain_Text$0.cipher_text = Cipher_Text$0 (1-to-1 relationship)
 
-// if Cipher_Text$0.plain_text = Plain_Text$0;
-// then Plain_Text$0.cipher_text = Cipher_Text$0
     all ct: Cipher_Text, pt: Plain_Text {
         some pk: Public_Key {
             (ct.plain_text = pt) <=> (pk.(pt.encryption) = ct)
@@ -540,11 +573,18 @@ fact encryption_fact {
         one kp: Key_Pair | no kp': Key_Pair | kp' != kp and kp'.private_key = priv_key
     }
 
-    // public keys must be unique to each keypair
+    // continue: public keys must be unique to each keypair
     all pub_key: Public_Key {
         one kp: Key_Pair | no kp': Key_Pair | kp' != kp and kp'.public_key = pub_key
     }
 }
+
+// // Define the initial state of the Server
+// some sig Init_Sever_State in Server{} {
+//     // initial state of the Server
+//     #user_records = 0 // no user_records
+//     #device_mail = 0 // no device_mail mapping
+// }
 
 //------------------------
 // Check System Properties
@@ -569,7 +609,9 @@ assert creating_initiating_regular_session_preserve_session_matching {
             // create the regular session/delete the initiating session
             create_regular_session_for_device_record_from_initiating_session[dr_from, dr_from', dr_to, dr_to']
         }
+        
             =>
+        
         {
             some s, s': Regular_Session {
                 s in dr_from'.sessions
@@ -606,6 +648,27 @@ assert initiating_session_created_are_matching_sessions {
 
 check initiating_session_created_are_matching_sessions for 10
 
+// assert Matching_Session_Property {
+//     // all s, s': Initiating_Session | s' = create_matching_initiating_session[s'] 
+//     // all s, s': Initiating_Session {
+//     //     s' = create_matching_intiaiting_session[s] => {
+//     //         s.from = s'.to
+//     //         s.to = s'.from
+//     //         s.public_key = s.public_key
+//     //     } 
+//     // }
+
+//     all s, s': Regular_Session {
+//         s' = create_matching_regular_session[s] => {
+//             s.from = s'.to
+//             s.to = s'.from
+//             s.messages = s'.messages
+//         }
+//     }
+// }
+
+// check Matching_Session_Property for 3
+
 //-------------------
 // Run/Test Instances
 //-------------------
@@ -624,6 +687,7 @@ but 0 Private_Key,
     0 Session_ID,
     0 Device_ID,
     2 User_ID,
+    // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -642,6 +706,7 @@ but 0 Private_Key,
     0 Session_ID,
     0 Device_ID,
     2 User_ID,
+    // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -662,6 +727,7 @@ but 2 Private_Key,
     0 Session_ID,
     2 Device_ID,
     2 User_ID,
+    // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -681,6 +747,7 @@ but 2 Private_Key,
     0 Session_ID,
     2 Device_ID,
     2 User_ID,
+    // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -696,8 +763,13 @@ but 2 Private_Key,
     2 Public_Key,
     0 Server,
     0 User_Record,
+    // 4 Device_Record
+    // 2 Session,
     0 Message,
+    // 2 Session_ID,
+    // 2 Device_ID,
     0 User_ID,
+    // // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -712,8 +784,13 @@ but 2 Private_Key,
     2 Public_Key,
     0 Server,
     0 User_Record,
+    // 4 Device_Record
+    // 2 Session,
     0 Message,
+    // 2 Session_ID,
+    // 2 Device_ID,
     0 User_ID,
+    // // 1 Init_Sever_State,
     0 Text,
     0 Plain_Text,
     0 Cipher_Text,
@@ -724,6 +801,9 @@ but 2 Private_Key,
 // demonstrate encryption
 // present cipher/plain text (1-to-1 relationship) along
 // with public key to decrypt the ciphered text
+
+// - can use decrypt_text/encrypt_text function to check the encrypted/decrypted
+// texts
 run encrypt_run {
     // invariants
     #Cipher_Text > 2
@@ -740,4 +820,5 @@ but 3 Private_Key,
     0 Message,
     0 Session_ID,
     0 User_ID,
+    // 1 Init_Sever_State,
     0 Mailbox
