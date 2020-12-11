@@ -26,13 +26,15 @@ sig Server {
 sig User_Record {
 	device_records : Device_Record, 
 	stale : Int, // mark the time the user record has been in the stale state, -1 for active
-	known_devices_keys : Public_Key // user identity keys
+	known_devices_keys : Public_Key, // user identity keys
+	id: one User_ID
 }
 
 sig Device_Record {
 	active_session : lone Session,
 	inactive_sessions : Session,
 	stale : Int // mark the time the device record has been in the stale state, -1 for active
+	id: one Device_ID
 }
 
 sig User {
@@ -279,7 +281,7 @@ pred send_message[s, s': Server, m: Message, uid: User_ID] {
 	// update the server.device_mail
 }
 
-pred receive_message[s, s': Server] {
+pred receive_message[s, s': Server, m: ] {
 }
 
 //-----------------------
