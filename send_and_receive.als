@@ -377,7 +377,7 @@ pred encrypt_message[m, m': Message, dr: Device_Record, ur: User_Record] {
 
 // helper function
 // decrypt the ciphered text on device
-pred decrypt_message[m, m': Message, dr: User_Record] {
+pred decrypt_message[m, m': Message, dr: Device_Record] {
     // pre-condition:
     // usr must has the public key needed to decrypt the ciphered text in the message
     m.content.private_key = dr.keys.private_key
@@ -413,7 +413,7 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
     ur_to in s.user_records
 
     // plain_text can be encrypted to an arbitrary Cipher_Text using the public key of the current device (that message is sent from)
-    one ct: Cipher_Text | dr_from.keys.public_key -> ct in pt.encryption
+    some ct: Cipher_Text | dr_from.keys.public_key -> ct in pt.encryption
 
     // there exists *active* regular sessions to establish the communication
 
@@ -423,37 +423,47 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
 
     // naming conflict s: Server, s: Session
     // send message from the dr_from to ur_from's all other devices and recipients' all devices
-    all dr: ur_from.device_records - dr_from, dr': ur_to.device_records | some sid: Session_ID {//some : Regular_Session {
-        // make sure there are established sessions first / there are matching regular sessions
-        // all devices but the device that the message is sent from, must establish session connection 
-        // all devices of the receipts must establish regular session connection with the sender
-        sid in dr.sessions.id // s in all other devices of sender
-        sid in dr'.sessions.id // s in all recipient devices
-        sid in dr_from.sessions.id // matches the session in the sending device
+    all dr: ur_from.device_records - dr_from + ur_to.device_records |
+        some sid: Session_ID {//some : Regular_Session {
+            // make sure there are established sessions first / there are matching regular sessions
+            // all devices but the device that the message is sent from, must establish session connection 
+            // all devices of the receipts must establish regular session connection with the sender
+            sid in dr.sessions.id // s in all other devices of sender and receipient device
+            // sid in dr'.sessions.id // s in all recipient devices
+            sid in dr_from.sessions.id // matches the session in the sending device
 
-        // post-condition
-        // send message to the server first, in "receive_message" fetch the encrypted message from the server
-        // append the message to the session in the sender (porting to self and other devices)
-        some m: Message {
-            m = create_message_from_text[pt, dr_from.id, ur_from.id]
-            // append dr -> Mailbox(m), dr' -> Mailbox(m)
-            // append message to the session of dr_from (dr_from'.sessions) and the server mailbox
-            
-            all sender_session: Regular_Session {
-                sender_session.id = sid
-                one sender_session': Session {
+            // post-condition
+            // send message to the server first, in "receive_message" fetch the encrypted message from the server
+            // append the message to the session in the sender (porting to self and other devices)
+            some pm: Message, cm: Message {
 
-                    sender_session'.messages = sender_session.messages + m // append the message to the sender sessions
-                    sender_session'.id = sender_session.id
-                    sender_session'.from = sender_session.from
-                    sender_session'.to = sender_session.to
+                pm = create_message_from_text[pt, dr_from.id, ur_from.id]
 
-                    // post-condition
-                    sender_session' in dr_from'.sessions
+                // encrypt the message to cm (ciphered message)
+                encrypt_message[pm, cm, dr, ur_to]
+
+                // append dr -> Mailbox(m), dr' -> Mailbox(m)
+                // append message to the session of dr_from (dr_from'.sessions) and the server mailbox
+                
+                all sender_session: dr_from.sessions {
+                    sender_session.id = sid
+
+                    some sender_session': Regular_Session {
+
+                        sender_session'.messages = sender_session.messages + pm // append the message to the sender sessions
+                        sender_session'.id = sender_session.id
+                        sender_session'.from = sender_session.from
+                        sender_session'.to = sender_session.to
+
+                        // post-condition
+                        // replace the previous sender_session with the sender_session (with message appended) 
+                        dr_from'.sessions = dr_from.sessions - sender_session + sender_session'
+                    }
                 }
             }
         }
-    }
+
+    // update the mailbox***
 
     // post condition, update User_Record and Server state
     ur_from'.device_records = ur_from.device_records - dr_from + dr_from'
@@ -464,8 +474,47 @@ pred send_message_to_server[pt: Plain_Text, s, s': Server, ur_from, ur_from', ur
 
 }
 
-pred receive_message_from_server[] {
+pred receive_message_from_server[s, s': Server, dr_to, dr_to': Device_Record] {
     // append the corresponding sessions
+    // pre-condition:
+    // the recipient Device_Records belongs to a registered User_Record in the Server
+    dr_to in s.user_records.device_records
+
+    // extract all messages that belongs to the Device_Record dr_to
+    all cm: dr_to.(s.device_mail).messages { // all ciphered messages intended to be sent to dr_to
+        some pm: Message {
+            decrypt_message[cm, pm, dr_to]
+
+            // decrypted message is pm
+            some ur_from: User_Record, dr_from: Device_Record {
+                ur_from.id = pm.sender_user_ID
+                dr_from.id = pm.sender_device_ID
+                dr_from = ur_from.device_records
+
+                // find out matching sessions
+                some receiver_session: Regular_Session {
+                    receiver_session in dr_to.sessions
+
+                    receiver_session.id in dr_from.sessions.id
+                    receiver_session.id in dr_to.sessions.id
+
+                    some receiver_session': Regular_Session{
+                        receiver_session'.messages = receiver_session.messages + pm // append the message to the sender sessions
+                        receiver_session'.id = receiver_session.id
+                        receiver_session'.from = receiver_session.from
+                        receiver_session'.to = receiver_session.to
+
+                        // post-condition
+                        // replace the previous sender_session with the sender_session (with message appended) 
+                        dr_to'.sessions = dr_from.sessions - receiver_session + receiver_session'
+                    }
+                }
+            }
+
+        }
+    }
+
+    s'.user_records.device_records = s.user_records.device_records - dr_to + dr_to'
 }
 
 // add them to the corresponding session in the session in the receipient (Via Session_ID)
